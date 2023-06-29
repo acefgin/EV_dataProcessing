@@ -25,7 +25,7 @@ def smooth(x,window_len=10,window='hanning'):
 	y = np.convolve(w/w.sum(),s,mode='valid')
 	return np.round(y, decimals = 3)
 
-def evopAnalysis(signal):
+def evopAnalysis(signal): # identifying jumps in the data via np.diff, to separate & average each illumination level
     signalDiff = np.round(np.diff(signal), 2)
     step_idx = [0]
     for n, diff in enumerate(signalDiff):
@@ -38,7 +38,7 @@ def evopAnalysis(signal):
             signalStages.append(np.round(np.average(signal[step_idx[i]:step_idx[i+1]]), 2))
     return signalStages
     
-def csvAnalyzer(filename):
+def csvAnalyzer(filename): # breaking up the spreadsheet data to divide by sensor
 
     print(os.path.splitext(os.path.basename(filename))[0])
 
@@ -55,7 +55,7 @@ def csvAnalyzer(filename):
         idx = 0
         headerDist = {}
 
-        for row in plots:
+        for row in plots: 
             if idx == 0:
                 for n, header in enumerate(row):
                     headerDist[header] = n
@@ -66,7 +66,7 @@ def csvAnalyzer(filename):
             if idx == 11:
                 y1 = row[7:]
                 y1 = np.array([float(i) for i in y1])
-                if len(y1) >= 9: signalList.append(y1)
+                if len(y1) >= 9: signalList.append(y1) # checking if there's data in the file
             if idx == 12:
                 y2 = row[7:]
                 y2 = np.array([float(i) for i in y2])
@@ -91,22 +91,49 @@ def csvAnalyzer(filename):
             rltList.append(evopAnalysis(signalList[i]))
     return sampleId, rltList
 
-if __name__=='__main__':
-    csvfoler = sys.argv[1]
-    filenames = sorted(glob.glob(os.path.join(csvfoler, '*.csv')))
-    print('Analysis optical EV test CSVs...')
+
+# start here
+
+
+if __name__=='__main__': # if running FROM evopAnalysis.py
+    csvfoler = sys.argv[1] # csvfoler = the folder being processed
+    filenames = sorted(glob.glob(os.path.join(csvfoler, '*.csv'))) # list of files in numerical order
+    print('Analyzing optical EV test CSVs...')
+    print(filenames)
+    THRESHOLD = 1.5
     
-    header = ["SampleID", "IlluminationLv", "PD1", "PD2", "PD3", "PD4", "PD5"]
+    header = ["SampleID", "IlluminationLv", "PD1", "PD2", "PD3", "PD4", "PD5", "AVG", "Diff (subt)", "Diff (div)"]
     with open('report.csv','w', newline = '') as reportCsv:
         writer = csv.writer(reportCsv)
         writer.writerow(header)
+        controlAvg = []
+        diffAvg = []
         for filename in filenames:
+            
+            print(filename)
             sampleId, chStages = csvAnalyzer(filename)
             for lv in range(5):
                 data2write = [sampleId]
                 data2write.append(lv + 1)
                 for ch in range(5):
                     data2write.append(chStages[ch][lv])
-                writer.writerow(data2write)
+                avg = np.round(np.average([chStages[0][lv], chStages[1][lv], chStages[2][lv], chStages[3][lv], chStages[4][lv]]),2)
+                data2write.append(avg) # add column for average values across PDs for each Ill level
+                if sampleId == "CTL":
+                    controlAvg.append(avg)
+                else:
+                    data2write.append(avg - controlAvg[lv])
+                    diffDiv = np.round(avg/controlAvg[lv], 2)
+                    data2write.append(diffDiv)
+                    diffAvg.append(diffDiv)
+                    writer.writerow(data2write)
+            if sampleId != "CTL":
+                average = np.round(np.average(diffAvg), 2)
+                if average <= THRESHOLD:
+                    print("Avg diff. factor <= Threshold. " + str(average) + " <= " + str(THRESHOLD))
+                else:
+                    print("Avg diff. factor EXCEEDS Threshold. " + str(average) + " > " + str(THRESHOLD))
+                
+                
     input('Press <Enter> to exit')
-
+    # updated!
